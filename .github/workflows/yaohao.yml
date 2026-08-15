@@ -18,6 +18,8 @@ jobs:
         run: pip install -r requirements.txt
       - name: 执行摇号查询
         run: python check_yaohao.py
+        env:
+          PROXY_BASE_URL: ${{ secrets.PROXY_BASE_URL }}
       - name: 推送更新
         run: |
           git config user.name "github-actions[bot]"

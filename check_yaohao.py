@@ -21,7 +21,12 @@ from bs4 import BeautifulSoup
 APPLY_CODE = "1187104949388"        # 申请编码
 APPLY_CODE_MASKED = "1187****9388"  # 脱敏编码
 APPLICANT = "杰哥"
-GBL_URL = "https://jtzl.jtj.gz.gov.cn/index/gbl/"
+TARGET_HOST = "https://jtzl.jtj.gz.gov.cn"
+GBL_PATH = "/index/gbl/"   
+# 代理配置：通过 Cloudflare Worker 中转绕过海外 IP 403 限制
+# 设置环境变量 PROXY_BASE_URL 即可启用代理（如 https://yaohao-proxy.your-name.workers.dev ）
+PROXY_BASE_URL = os.environ.get("PROXY_BASE_URL", "")
+GBL_URL = f"{PROXY_BASE_URL}{GBL_PATH}" if PROXY_BASE_URL else f"{TARGET_HOST}{GBL_PATH}"
 REPO_DIR = Path(__file__).parent.resolve()
 STATE_FILE = REPO_DIR / "state.json"
 HEADERS = {
@@ -64,14 +69,32 @@ def save_state(state: dict):
         json.dump(state, f, indent=2, ensure_ascii=False)
 
 
+def proxy_url(url: str) -> str:
+    """将目标URL转为代理URL"""
+    if not PROXY_BASE_URL:
+        return url
+    # 将 https://jtzl.jtj.gz.gov.cn/xxx 替换为 https://proxy/xxx
+    if url.startswith(TARGET_HOST):
+        return PROXY_BASE_URL + url[len(TARGET_HOST):]
+    return url
+
+
 def fetch_gbl_page() -> str:
     """获取公布栏首页HTML"""
+    print(f"  使用{'代理' if PROXY_BASE_URL else '直连'}: {GBL_URL}")
     for attempt in range(3):
         try:
             resp = requests.get(GBL_URL, headers=HEADERS, timeout=REQUEST_TIMEOUT)
             # 用content让BS4自动检测编码（HTML meta标签中声明了charset=utf-8）
             soup = BeautifulSoup(resp.content, "html.parser")
             print(f"  HTTP {resp.status_code}, len={len(resp.content)}, encoding={resp.encoding}")
+            if resp.status_code == 403:
+                print(f"  403 Forbidden! 可能是海外IP被限制，请配置 PROXY_BASE_URL")
+                if attempt < 2:
+                    print(f"  等待10秒后重试...")
+                    import time; time.sleep(10)
+                    continue
+                raise Exception("公布栏返回403，需要配置代理")
             return str(soup)
         except Exception as e:
             print(f"  请求失败(尝试{attempt+1}/3): {e}")
@@ -107,6 +130,8 @@ def find_yaohao_links(html: str) -> list:
 
 def find_pdf_url(detail_url: str) -> str | None:
     """从摇号结果详情页提取个人摇号结果PDF链接"""
+    # 将详情页URL转为代理URL
+    detail_url = proxy_url(detail_url)
     for attempt in range(3):
         try:
             resp = requests.get(detail_url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
@@ -117,7 +142,7 @@ def find_pdf_url(detail_url: str) -> str | None:
                 href = link["href"]
                 if "个人" in text and "摇号" in text and href.endswith(".pdf"):
                     if not href.startswith("http"):
-                        href = "https://jtzl.jtj.gz.gov.cn" + href
+                        href = TARGET_HOST + href
                     print(f"  PDF链接: [{text}] -> [{href}]")
                     return href
             print(f"  未找到个人摇号PDF链接")
@@ -130,6 +155,8 @@ def find_pdf_url(detail_url: str) -> str | None:
 
 def check_code_in_pdf(pdf_url: str, code: str) -> bool:
     """下载PDF并搜索申请编码，返回是否中签"""
+    # 将PDF URL也转为代理URL
+    pdf_url = proxy_url(pdf_url)
     print(f"  下载PDF: {pdf_url}")
     resp = requests.get(pdf_url, headers=HEADERS, timeout=120)
     resp.raise_for_status()
