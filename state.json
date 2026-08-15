@@ -1,0 +1,13 @@
+{
+  "code": "1187104949388",
+  "total_ballots": 6,
+  "history": [
+    {"month": "2026-01", "joined": true, "won": false},
+    {"month": "2026-02", "joined": true, "won": false},
+    {"month": "2026-03", "joined": true, "won": false},
+    {"month": "2026-04", "joined": true, "won": false},
+    {"month": "2026-05", "joined": true, "won": false},
+    {"month": "2026-06", "joined": true, "won": false},
+    {"month": "2026-07", "joined": true, "won": false}
+  ]
+}
