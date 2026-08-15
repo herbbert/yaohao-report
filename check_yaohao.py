@@ -214,7 +214,7 @@ def generate_report(state: dict, month: str, joined: bool, won: bool) -> str:
     lines = [
         f"# 广州车牌摇号月度报告",
         f"",
-        f"> 本期：{month_cn} | 申请人：{APPLICANT} | 申请编码：{APPLY_CODE_MASKED}",
+        f"> 本期：{month_cn} | 申请人：{APPLICANT} | 申请编码：{APPLY_CODE}",
         f"",
         f"---",
         f"",
@@ -304,7 +304,7 @@ def generate_readme(state: dict) -> str:
         "每月自动查询广州车牌摇号结果，生成月度报告并推送到本仓库。",
         "",
         f"- 申请人：{APPLICANT}",
-        f"- 申请编码：{APPLY_CODE_MASKED}",
+        f"- 申请编码：{APPLY_CODE}",
         "- 自动查询时间：每月 26/27 日（GitHub Actions 云端执行，无需本地电脑开机）",
         "- 数据来源：广州市中小客车指标调控管理信息系统",
         "",
@@ -416,7 +416,7 @@ def build_mail_html(state: dict, new_results: list) -> str:
         <tr style="background:#f0f0f0"><th style="border:1px solid #ddd;padding:8px;text-align:left">月份</th><th style="border:1px solid #ddd;padding:8px;text-align:left">结果</th></tr>
         {history_rows}
       </table>
-      <p style="color:#999;font-size:12px;margin-top:16px">查询时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | 申请人：{APPLICANT} | 编码：{APPLY_CODE_MASKED}</p>
+      <p style="color:#999;font-size:12px;margin-top:16px">查询时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | 申请人：{APPLICANT} | 编码：{APPLY_CODE}</p>
     </div>"""
     return html
 
@@ -425,7 +425,7 @@ def main():
     print("=" * 50)
     print("广州车牌摇号自动查询")
     print(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"申请编码: {APPLY_CODE_MASKED}")
+    print(f"申请编码: {APPLY_CODE}")
     print("=" * 50)
 
     # 1. 读取状态
@@ -466,7 +466,7 @@ def main():
         # 下载PDF搜索编码
         try:
             won = check_code_in_pdf(pdf_url, APPLY_CODE)
-            print(f"  申请编码 {APPLY_CODE_MASKED}: {'中签!' if won else '未中签'}")
+            print(f"  申请编码 {APPLY_CODE}: {'中签!' if won else '未中签'}")
             new_results.append((month, True, won))
         except Exception as e:
             print(f"  PDF下载/解析错误: {e}")
