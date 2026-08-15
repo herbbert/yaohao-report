@@ -1,0 +1,35 @@
+name: 摇号结果查询
+
+on:
+  schedule:
+      - cron: '0 1 26 * *'
+          - cron: '0 1 27 * *'
+            workflow_dispatch:
+
+            jobs:
+              check:
+                  runs-on: ubuntu-latest
+                      permissions:
+                            contents: write
+
+                                    steps:
+                                          - name: 检出仓库
+                                                  uses: actions/checkout@v4
+
+                                                        - name: 安装 Python 依赖
+                                                                run: pip install -r requirements.txt
+
+                                                                      - name: 执行摇号查询
+                                                                              run: python check_yaohao.py
+
+                                                                                    - name: 推送更新
+                                                                                            run: |
+                                                                                                      git config user.name "github-actions[bot]"
+                                                                                                                git config user.email "github-actions[bot]@users.noreply.github.com"
+                                                                                                                          git add -A
+                                                                                                                                    if git diff --staged --quiet; then
+                                                                                                                                                echo "没有变更，跳过推送"
+                                                                                                                                                          else
+                                                                                                                                                                      git commit -m "auto: 更新摇号月报 $(date '+%Y-%m-%d')"
+                                                                                                                                                                                  git push
+                                                                                                                                                                                            fi
