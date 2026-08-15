@@ -28,3 +28,4 @@ jobs:
           else
             git commit -m "auto: 更新摇号月报 $(date '+%Y-%m-%d')"
             git push
+          fi

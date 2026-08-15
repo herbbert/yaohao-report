@@ -66,9 +66,17 @@ def save_state(state: dict):
 
 def fetch_gbl_page() -> str:
     """获取公布栏首页HTML"""
-    resp = requests.get(GBL_URL, headers=HEADERS, timeout=REQUEST_TIMEOUT)
-    resp.encoding = "utf-8"
-    return resp.text
+    for attempt in range(3):
+        try:
+            resp = requests.get(GBL_URL, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+            # 用content让BS4自动检测编码（HTML meta标签中声明了charset=utf-8）
+            soup = BeautifulSoup(resp.content, "html.parser")
+            print(f"  HTTP {resp.status_code}, len={len(resp.content)}, encoding={resp.encoding}")
+            return str(soup)
+        except Exception as e:
+            print(f"  请求失败(尝试{attempt+1}/3): {e}")
+            if attempt == 2:
+                raise
 
 
 def find_yaohao_links(html: str) -> list:
@@ -78,30 +86,46 @@ def find_yaohao_links(html: str) -> list:
     """
     soup = BeautifulSoup(html, "html.parser")
     results = []
-    for link in soup.find_all("a", href=True):
+    all_links = soup.find_all("a", href=True)
+    print(f"  页面共 {len(all_links)} 个链接")
+    yaohao_count = 0
+    for link in all_links:
         text = link.get_text(strip=True)
         href = link["href"]
-        # 匹配 "个人、单位普通车（摇号）配置结果" 的链接
-        if "摇号" in text and "配置结果" in text and "单位" in text:
-            if not href.startswith("http"):
-                href = "https://jtzl.jtj.gz.gov.cn" + href
-            results.append((text, href))
+        if "摇号" in text:
+            yaohao_count += 1
+            print(f"  摇号链接: text=[{text[:50]}] href=[{href[:80]}]")
+            # 匹配 "个人、单位普通车（摇号）配置结果" 的链接
+            if "配置结果" in text and "单位" in text:
+                if not href.startswith("http"):
+                    href = "https://jtzl.jtj.gz.gov.cn" + href
+                results.append((text, href))
+                print(f"    >>> 匹配成功!")
+    print(f"  含'摇号'的链接: {yaohao_count}个, 精确匹配: {len(results)}个")
     return results
 
 
 def find_pdf_url(detail_url: str) -> str | None:
     """从摇号结果详情页提取个人摇号结果PDF链接"""
-    resp = requests.get(detail_url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
-    resp.encoding = "utf-8"
-    soup = BeautifulSoup(resp.text, "html.parser")
-    for link in soup.find_all("a", href=True):
-        text = link.get_text(strip=True)
-        href = link["href"]
-        if "个人" in text and "摇号" in text and href.endswith(".pdf"):
-            if not href.startswith("http"):
-                href = "https://jtzl.jtj.gz.gov.cn" + href
-            return href
-    return None
+    for attempt in range(3):
+        try:
+            resp = requests.get(detail_url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+            soup = BeautifulSoup(resp.content, "html.parser")
+            print(f"  详情页 HTTP {resp.status_code}, links={len(soup.find_all('a', href=True))}")
+            for link in soup.find_all("a", href=True):
+                text = link.get_text(strip=True)
+                href = link["href"]
+                if "个人" in text and "摇号" in text and href.endswith(".pdf"):
+                    if not href.startswith("http"):
+                        href = "https://jtzl.jtj.gz.gov.cn" + href
+                    print(f"  PDF链接: [{text}] -> [{href}]")
+                    return href
+            print(f"  未找到个人摇号PDF链接")
+            return None
+        except Exception as e:
+            print(f"  详情页请求失败(尝试{attempt+1}/3): {e}")
+            if attempt == 2:
+                return None
 
 
 def check_code_in_pdf(pdf_url: str, code: str) -> bool:
