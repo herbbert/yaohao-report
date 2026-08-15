@@ -20,6 +20,9 @@ jobs:
         run: python check_yaohao.py
         env:
           PROXY_BASE_URL: ${{ secrets.PROXY_BASE_URL }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_CODE: ${{ secrets.SMTP_CODE }}
+          SMTP_TO: ${{ secrets.SMTP_TO }}
       - name: 推送更新
         run: |
           git config user.name "github-actions[bot]"

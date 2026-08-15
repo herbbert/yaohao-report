@@ -10,8 +10,13 @@
 import json
 import os
 import re
+import ssl
+import smtplib
 import sys
 from datetime import datetime
+from email.mime.text import MIMEText
+from email.header import Header
+from email.utils import formataddr
 from pathlib import Path
 
 import requests
@@ -33,6 +38,14 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
+# ============ 邮件通知配置 ============
+SMTP_HOST = "smtp.qq.com"
+SMTP_PORT = 465
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_CODE = os.environ.get("SMTP_CODE", "")
+SMTP_TO = os.environ.get("SMTP_TO", "")
+MAIL_FROM_NAME = "摇号查询通知"
+
 REQUEST_TIMEOUT = 60
 
 # 阶梯规则：每12次升一阶，73次及以上直接领牌
@@ -328,6 +341,86 @@ def generate_readme(state: dict) -> str:
 
 
 
+def send_mail(subject: str, body_html: str) -> bool:
+    """通过QQ邮箱SMTP发送邮件通知"""
+    if not (SMTP_USER and SMTP_CODE and SMTP_TO):
+        print("[WARN] SMTP 配置缺失，跳过邮件通知")
+        return False
+    try:
+        msg = MIMEText(body_html, "html", "utf-8")
+        msg["Subject"] = Header(subject, "utf-8")
+        msg["From"] = formataddr((str(Header(MAIL_FROM_NAME, "utf-8")), SMTP_USER))
+        msg["To"] = SMTP_TO
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx, timeout=30) as server:
+            server.login(SMTP_USER, SMTP_CODE)
+            server.sendmail(SMTP_USER, [SMTP_TO], msg.as_string())
+        print(f"  邮件已发送 -> {SMTP_TO}")
+        return True
+    except Exception as e:
+        print(f"[WARN] 邮件发送失败: {e}")
+        return False
+
+
+def build_mail_html(state: dict, new_results: list) -> str:
+    """构建邮件HTML内容"""
+    total = state["total_ballots"]
+    ladder_info = get_ladder_info(total)
+
+    if ladder_info["ladder"] == 7:
+        ladder_desc = "直接领牌"
+        mult_desc = "直领"
+    else:
+        ladder_desc = f"第 {ladder_info['ladder']} 阶梯"
+        mult_desc = f"{ladder_info['multiplier']}x"
+
+    # 构建新结果部分
+    if new_results:
+        result_rows = ""
+        for month, joined, won in new_results:
+            y, m = month.split("-")
+            month_cn = f"{y}年{int(m)}月"
+            status = '<span style="color:green;font-weight:bold">中签!</span>' if won else '<span style="color:#999">未中签</span>'
+            result_rows += f"<tr><td>{month_cn}</td><td>{'是' if joined else '否'}</td><td>{status}</td></tr>"
+        new_section = f"""
+        <h3>本期结果</h3>
+        <table style="border-collapse:collapse;width:100%">
+          <tr style="background:#f0f0f0"><th style="border:1px solid #ddd;padding:8px;text-align:left">月份</th><th style="border:1px solid #ddd;padding:8px;text-align:left">参与</th><th style="border:1px solid #ddd;padding:8px;text-align:left">结果</th></tr>
+          {result_rows}
+        </table>"""
+    else:
+        new_section = '<p style="color:#666">本期暂无新的摇号结果公布。</p>'
+
+    # 历史记录最近5条
+    recent = state["history"][-5:]
+    history_rows = ""
+    for entry in recent:
+        y, m = entry["month"].split("-")
+        month_cn = f"{y}年{int(m)}月"
+        w = '<span style="color:green">中签</span>' if entry["won"] else "未中签"
+        history_rows += f"<tr><td>{month_cn}</td><td>{w}</td></tr>"
+
+    html = f"""
+    <div style="max-width:600px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+      <h2 style="color:#333;border-bottom:2px solid #4CAF50;padding-bottom:8px">广州车牌摇号查询报告</h2>
+      {new_section}
+      <h3>进度概览</h3>
+      <table style="border-collapse:collapse;width:100%">
+        <tr style="background:#f0f0f0"><th style="border:1px solid #ddd;padding:8px;text-align:left">指标</th><th style="border:1px solid #ddd;padding:8px;text-align:left">数值</th></tr>
+        <tr><td style="border:1px solid #ddd;padding:8px">累计摇号</td><td style="border:1px solid #ddd;padding:8px">{total} 次</td></tr>
+        <tr><td style="border:1px solid #ddd;padding:8px">当前阶梯</td><td style="border:1px solid #ddd;padding:8px">{ladder_desc}</td></tr>
+        <tr><td style="border:1px solid #ddd;padding:8px">当前倍率</td><td style="border:1px solid #ddd;padding:8px">{mult_desc}</td></tr>
+      </table>
+      <h3>近期记录</h3>
+      <table style="border-collapse:collapse;width:100%">
+        <tr style="background:#f0f0f0"><th style="border:1px solid #ddd;padding:8px;text-align:left">月份</th><th style="border:1px solid #ddd;padding:8px;text-align:left">结果</th></tr>
+        {history_rows}
+      </table>
+      <p style="color:#999;font-size:12px;margin-top:16px">查询时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | 申请人：{APPLICANT} | 编码：{APPLY_CODE_MASKED}</p>
+    </div>"""
+    return html
+
+
 def main():
     print("=" * 50)
     print("广州车牌摇号自动查询")
@@ -429,6 +522,20 @@ def main():
     else:
         print("本期暂无新结果")
     print("=" * 50)
+
+    # 发送邮件通知
+    print("\n[邮件] 发送通知...")
+    if new_results:
+        has_won = any(w for _, _, w in new_results)
+        if has_won:
+            mail_subject = "广州摇号结果：中签!"
+        else:
+            months_str = "、".join(m for m, _, _ in new_results)
+            mail_subject = f"广州摇号结果：{months_str} 未中签"
+    else:
+        mail_subject = "广州摇号查询：本期暂无新结果"
+    mail_body = build_mail_html(state, new_results)
+    send_mail(mail_subject, mail_body)
 
 
 if __name__ == "__main__":
