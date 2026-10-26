@@ -1,6 +1,6 @@
 {
   "code": "1187104949388",
-  "total_ballots": 8,
+  "total_ballots": 9,
   "history": [
     {
       "month": "2026-01",
@@ -39,6 +39,11 @@
     },
     {
       "month": "2026-08",
+      "joined": true,
+      "won": false
+    },
+    {
+      "month": "2026-09",
       "joined": true,
       "won": false
     }
